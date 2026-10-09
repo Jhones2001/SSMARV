@@ -1,0 +1,77 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Solicitação de EPI e Uniforme</title>
+<style>
+ body{font-family:system-ui,sans-serif;max-width:640px;margin:auto;padding:16px;background:#f6f8f7}
+ label{display:block;margin-top:12px;font-weight:600}
+ input,select,button{width:100%;padding:10px;margin-top:4px;font-size:16px;box-sizing:border-box}
+ .item{display:flex;gap:8px;align-items:center;border:1px solid #ddd;background:#fff;padding:8px;margin-top:6px;border-radius:6px}
+ .item input[type=checkbox],.tipo input{width:auto;margin:0}
+ .item select{width:110px;margin:0}
+ .tipo{display:flex;gap:8px;align-items:center}
+ button{background:#0a6;color:#fff;border:0;border-radius:6px;margin-top:20px;cursor:pointer}
+ button:disabled{opacity:.6}
+</style></head><body>
+<h2>Solicitação de Uniformes e EPIs</h2>
+<form id="f">
+ <label>Motivo da solicitação
+  <select name="motivo" required>
+   <option>Admissão</option><option>Troca/Desgaste</option>
+   <option>Mudança de Cargo</option><option>Extravio/Mau Uso</option></select></label>
+ <p id="aviso" hidden><small>Ciente do desconto em folha de pagamento pelo uso indevido do EPI/Uniforme, conforme contrato individual de trabalho e legislação vigente (art. 462 CLT).</small></p>
+ <label>Nome <input name="nome" required></label>
+ <label>Matrícula <input name="matricula" inputmode="numeric" required></label>
+ <label>Filial <select name="filial" id="filial" required></select></label>
+ <label>Setor <select name="setor" id="setor" required></select></label>
+ <label>Cargo <select name="cargo" id="cargo" required></select></label>
+
+ <label>O que deseja solicitar? (pode marcar mais de um tipo)</label>
+ <label class="tipo"><input type="checkbox" id="cU"> Uniforme</label>
+ <div id="uniforme" hidden></div>
+ <label class="tipo"><input type="checkbox" id="cE"> EPI</label>
+ <div id="epi" hidden></div>
+ <label class="tipo"><input type="checkbox" id="cT"> EPI Térmico (câmara fria)</label>
+ <div id="termico" hidden></div>
+ <button id="btn">Enviar solicitação</button>
+</form>
+<script>
+let cat;
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const opt=a=>a.map(x=>`<option>${esc(x.nome)}</option>`).join("");
+function lista(el,categoria){
+  const its=cat.itens.filter(i=>i.categoria===categoria);
+  $(el).innerHTML=its.length?its.map(i=>`
+   <div class="item"><input type="checkbox" data-cat="${categoria}" data-item="${esc(i.nome)}">
+   <span style="flex:1">${esc(i.nome)}</span>
+   <select>${i.tamanhos.map(t=>`<option>${esc(t)}</option>`).join("")}</select></div>`).join("")
+   :"<small>Nenhum item cadastrado.</small>";
+}
+async function init(){
+  cat=await (await fetch("/api?a=catalogo")).json();
+  $("#filial").innerHTML=opt(cat.filiais);
+  $("#cargo").innerHTML=opt(cat.cargos);
+  const setores=()=>$("#setor").innerHTML=opt(cat.setores.filter(s=>s.filial===$("#filial").value));
+  $("#filial").onchange=setores; setores();
+  lista("#uniforme","UNIFORME");lista("#epi","EPI");lista("#termico","EPI_TERMICO");
+  [["cU","uniforme"],["cE","epi"],["cT","termico"]].forEach(([c,d])=>
+    $("#"+c).onchange=e=>$("#"+d).hidden=!e.target.checked);
+  $("[name=motivo]").onchange=e=>$("#aviso").hidden=e.target.value!=="Extravio/Mau Uso";
+}
+$("#f").onsubmit=async e=>{
+  e.preventDefault();
+  const fd=Object.fromEntries(new FormData(e.target));
+  fd.itens=[...document.querySelectorAll(".item input:checked")].map(c=>({
+    categoria:c.dataset.cat,item:c.dataset.item,
+    tamanho:c.closest(".item").querySelector("select").value}));
+  if(!fd.itens.length) return alert("Selecione ao menos um item");
+  $("#btn").disabled=true;
+  const r=await fetch("/api?a=enviar",{method:"POST",body:JSON.stringify(fd)});
+  $("#btn").disabled=false;
+  if(r.ok){alert("Solicitação enviada com sucesso!");e.target.reset();
+    ["uniforme","epi","termico"].forEach(d=>$("#"+d).hidden=true);$("#aviso").hidden=true;}
+  else{const j=await r.json().catch(()=>({}));alert(j.erro||"Erro ao enviar");}
+};
+init();
+</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v4bc70e2c01a94c73b74392e4234840661791215815920" integrity="sha512-L0ha0OXavK/8okipN9F8BtP84dg9DUhPERbBXzwI6dgTA55d2+yweo3pn5CSFYs45/r8md2+xvUPtTdvTNRfjA==" data-cf-beacon='{"version":"2024.11.0","token":"55d6c902a8a143b1ab6c5051b2a1f75b","spa":2}' crossorigin="anonymous"></script>
+</body></html>

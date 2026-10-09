@@ -1,0 +1,9 @@
+{
+  "name": "epi-uniforme",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "@netlify/neon": "latest",
+    "docx": "^8.5.0"
+  }
+}

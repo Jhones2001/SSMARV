@@ -1,0 +1,73 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Painel SST</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<style>
+ body{font-family:system-ui,sans-serif;max-width:1100px;margin:auto;padding:16px}
+ table{width:100%;border-collapse:collapse;margin-top:8px}
+ td,th{border:1px solid #ddd;padding:6px;font-size:14px;text-align:left;vertical-align:top}
+ th{background:#f0f0f0}
+ .card{display:inline-block;background:#e8eefc;padding:10px 16px;margin:4px;border-radius:8px}
+ button{padding:5px 10px;margin:2px;cursor:pointer}
+ fieldset{margin:12px 0}
+</style></head><body>
+<h2>Painel Segurança do Trabalho</h2>
+<input type="password" id="pw" placeholder="Senha do painel">
+<button onclick="entrar()">Entrar</button>
+
+<fieldset><legend>Importar planilhas (.xlsx)</legend>
+ <p>Organização (colunas: <b>Filial | Setor | Cargo</b>):
+  <input type="file" accept=".xlsx" onchange="imp(this,'organizacao')"></p>
+ <p>Catálogo (colunas: <b>Categoria | Item | Tamanhos</b>; categoria = UNIFORME, EPI ou EPI_TERMICO):
+  <input type="file" accept=".xlsx" onchange="imp(this,'catalogo')"></p>
+</fieldset>
+
+<h3>Pendentes por filial</h3><div id="resumo"></div>
+<h3>Solicitações</h3>
+<select id="st" onchange="load()">
+ <option>PENDENTE</option><option>EM_ANALISE</option><option>ENTREGUE</option><option>CANCELADA</option></select>
+<button onclick="load()">Atualizar</button>
+<table id="t"></table>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const H=()=>({"x-admin-password":localStorage.pw||""});
+$("#pw").value=localStorage.pw||"";
+function entrar(){localStorage.pw=$("#pw").value;load();}
+
+async function imp(inp,tipo){
+  if(!inp.files[0]) return;
+  const wb=XLSX.read(await inp.files[0].arrayBuffer());
+  const linhas=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+  const r=await fetch("/api?a=importar",{method:"POST",headers:H(),body:JSON.stringify({tipo,linhas})});
+  alert(r.ok?"Importado: "+linhas.length+" linhas":"Erro ou senha inválida");
+  inp.value="";
+}
+async function load(){
+  const r=await fetch("/api?a=listar&status="+$("#st").value,{headers:H()});
+  if(!r.ok){$("#t").innerHTML="<tr><td>Senha inválida ou erro.</td></tr>";return;}
+  const {rows,resumo}=await r.json();
+  $("#resumo").innerHTML=resumo.map(x=>`<span class="card">${esc(x.filial)}: <b>${x.total}</b></span>`).join("")||"Nenhuma pendência.";
+  $("#t").innerHTML="<tr><th>Data</th><th>Nome</th><th>Mat.</th><th>Filial/Setor</th><th>Motivo</th><th>Itens</th><th>Ações</th></tr>"+
+  rows.map(s=>`<tr><td>${new Date(s.criado_em).toLocaleString("pt-BR")}</td>
+   <td>${esc(s.nome)}</td><td>${esc(s.matricula)}</td>
+   <td>${esc(s.filial)}<br><small>${esc(s.setor)}</small></td><td>${esc(s.motivo)}</td>
+   <td>${s.itens.map(i=>esc(i.item)+" ("+esc(i.tamanho)+")").join("<br>")}</td>
+   <td><button onclick="baixar(${s.id},'${esc(s.matricula)}')">Baixar .docx</button>
+   <button onclick="mv(${s.id},'EM_ANALISE')">Em análise</button>
+   <button onclick="mv(${s.id},'ENTREGUE')">Entregue</button>
+   <button onclick="mv(${s.id},'CANCELADA')">Cancelar</button></td></tr>`).join("");
+}
+async function baixar(id,mat){
+  const r=await fetch("/api?a=docx&id="+id,{headers:H()});
+  if(!r.ok) return alert("Erro ao gerar o documento");
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(await r.blob());
+  a.download=`R-CORP-038-01_${mat}_${id}.docx`;a.click();
+}
+async function mv(id,status){
+  await fetch("/api?a=status",{method:"POST",headers:H(),body:JSON.stringify({id,status})});load();
+}
+if(localStorage.pw) load();
+</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v4bc70e2c01a94c73b74392e4234840661791215815920" integrity="sha512-L0ha0OXavK/8okipN9F8BtP84dg9DUhPERbBXzwI6dgTA55d2+yweo3pn5CSFYs45/r8md2+xvUPtTdvTNRfjA==" data-cf-beacon='{"version":"2024.11.0","token":"55d6c902a8a143b1ab6c5051b2a1f75b","spa":2}' crossorigin="anonymous"></script>
+</body></html>
